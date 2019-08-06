@@ -156,9 +156,9 @@ class BiLSTMCL(object):
             graph_def = tf.GraphDef()
             graph_def.ParseFromString(f.read())
 
-            all_tensor = [n.name for n in graph_def.node]
-            for t in all_tensor:
-                print(t)
+            #all_tensor = [n.name for n in graph_def.node]
+            #for t in all_tensor:
+            #    print(t)
 
             logits, prediction = tf.import_graph_def(graph_def,return_elements=['logits:0', 'prediction:0'])
         
@@ -294,59 +294,59 @@ class BiLSTMCL(object):
             #encoder_output = tf.nn.dropout(encoder_output, self.args.keep_prob)
             #encoder_output = ln(encoder_output)
 
-            # Transformer-frame + att
-            layer_size = 2
-            encoder_output = e_x
-            for i in range(layer_size):
-                with tf.variable_scope('att-%d'%i):
-                    encoder_output = multihead_attention(encoder_output, encoder_output, encoder_output)
-                    encoder_output = ff(encoder_output, (self.args.hidden_dim, self.args.embedding_dim))
+            ## Transformer-frame + att
+            #layer_size = 1
+            #encoder_output = e_x
+            #for i in range(layer_size):
+            #    with tf.variable_scope('att-%d'%i):
+            #        encoder_output = multihead_attention(encoder_output, encoder_output, encoder_output)
+            #        encoder_output = ff(encoder_output, (self.args.hidden_dim, self.args.embedding_dim))
 
-            encoder_output, alpha = attention(encoder_output)
-            encoder_output = tf.nn.dropout(encoder_output, self.args.keep_prob)
-            encoder_output = ln(encoder_output)
+            #encoder_output, alpha = attention(encoder_output)
+            #encoder_output = tf.nn.dropout(encoder_output, self.args.keep_prob)
+            #encoder_output = ln(encoder_output)
 
             #encoder_output = encoder_output[:, 0, :] 
             #encoder_output = tf.layers.dense(encoder_output, self.args.embedding_dim, activation='tanh', use_bias=True)
             #encoder_output = ln(encoder_output)
 
-            ## CNN
-            #encoder_output = e_x
-            #embedded_chars_expanded = tf.expand_dims(encoder_output, -1) 
-            ## Create a convolution + maxpool layer for each filter size
-            #pooled_outputs = []
-            ##for i, filter_size in enumerate(filter_sizes):
-            #filter_sizes = [3,4,5]
+            # CNN
+            encoder_output = e_x
+            embedded_chars_expanded = tf.expand_dims(encoder_output, -1) 
+            # Create a convolution + maxpool layer for each filter size
+            pooled_outputs = []
             #for i, filter_size in enumerate(filter_sizes):
-            #    with tf.name_scope("conv-maxpool-%s" % filter_size):
-            #        # Convolution Layer
-            #        filter_shape = [filter_size, self.args.embedding_dim, 1, self.args.num_filters]
-            #        W = tf.Variable(tf.truncated_normal(filter_shape, stddev=0.1), name="W")
-            #        b = tf.Variable(tf.constant(0.1, shape=[self.args.num_filters]), name="b")
-            #        conv = tf.nn.conv2d(
-            #            embedded_chars_expanded,
-            #            W,  
-            #            strides=[1, 1, 1, 1], 
-            #            padding="VALID",
-            #            name="conv")
-            #        # Apply nonlinearity
-            #        h = tf.nn.relu(tf.nn.bias_add(conv, b), name="relu")
-            #        # Maxpooling over the outputs
-            #        pooled = tf.nn.max_pool(
-            #            h,  
-            #            ksize=[1, self.args.max_sent_len - filter_size + 1, 1, 1], 
-            #            strides=[1, 1, 1, 1], 
-            #            padding='VALID',
-            #            name="pool")
-            #        pooled_outputs.append(pooled)
+            filter_sizes = [3,4,5]
+            for i, filter_size in enumerate(filter_sizes):
+                with tf.name_scope("conv-maxpool-%s" % filter_size):
+                    # Convolution Layer
+                    filter_shape = [filter_size, self.args.embedding_dim, 1, self.args.num_filters]
+                    W = tf.Variable(tf.truncated_normal(filter_shape, stddev=0.1), name="W")
+                    b = tf.Variable(tf.constant(0.1, shape=[self.args.num_filters]), name="b")
+                    conv = tf.nn.conv2d(
+                        embedded_chars_expanded,
+                        W,  
+                        strides=[1, 1, 1, 1], 
+                        padding="VALID",
+                        name="conv")
+                    # Apply nonlinearity
+                    h = tf.nn.relu(tf.nn.bias_add(conv, b), name="relu")
+                    # Maxpooling over the outputs
+                    pooled = tf.nn.max_pool(
+                        h,  
+                        ksize=[1, self.args.max_sent_len - filter_size + 1, 1, 1], 
+                        strides=[1, 1, 1, 1], 
+                        padding='VALID',
+                        name="pool")
+                    pooled_outputs.append(pooled)
 
-            ## Combine all the pooled features
-            #num_filters_total = self.args.num_filters * len(filter_sizes)
-            ## N, FN, FS
-            #h_pool = tf.concat(pooled_outputs, 3)
-            ## N, Total_EF
-            #h_pool_flat = tf.reshape(h_pool, [-1, num_filters_total])
-            #encoder_output = h_pool_flat
+            # Combine all the pooled features
+            num_filters_total = self.args.num_filters * len(filter_sizes)
+            # N, FN, FS
+            h_pool = tf.concat(pooled_outputs, 3)
+            # N, Total_EF
+            h_pool_flat = tf.reshape(h_pool, [-1, num_filters_total])
+            encoder_output = h_pool_flat
 
         ## Decoder
         # N, C
@@ -365,6 +365,7 @@ class BiLSTMCL(object):
 
             temp2 = 20
             logits_t_temp2 = tf.nn.softmax(logits_t / temp2)
+
 
             loss_1 = -tf.reduce_mean(y_true*tf.log(logits)) 
             loss_2 = -tf.reduce_mean(logits_t_temp1*tf.log(logits/temp1)) 
