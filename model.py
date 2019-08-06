@@ -9,8 +9,8 @@ from tensorflow.contrib import rnn
 
 from tqdm import tqdm
 
-from blocks.new_modules import multihead_attention, ff, ln
-from blocks.modules import noam_scheme
+#from blocks.new_modules import multihead_attention, ff, ln
+from blocks.modules import multihead_attention, noam_scheme, ff, ln
 from blocks.position_embedding import position_embedding
 from blocks.attention import attention
 
@@ -127,11 +127,81 @@ class BiLSTMCL(object):
                 eval_result[2] = 2e32
             print('Accuracy && Recall of label %d is : %f %f'%(label_id, eval_result[0]/eval_result[1], eval_result[0]/eval_result[2]))
 
-    def predict(self):
-        pass
+    def freeze(self):
+        from tensorflow.python.framework import graph_util
+
+        dir_path = os.path.dirname(__file__)
+        self.model_path= os.path.join(dir_path, self.args.model_path)
+        pb_file = os.path.join(self.model_path, 'model.pb')
+
+        logits = tf.identity(self.logits, 'logits')
+        prediction = tf.identity(self.prediction, 'prediction')
+
+        with tf.Session() as sess:
+            saver = tf.train.Saver()
+            saver.restore(sess, tf.train.latest_checkpoint(self.model_path))
+            constant_graph = graph_util.convert_variables_to_constants(sess, sess.graph_def, ['logits', 'prediction'])
+
+        with tf.gfile.GFile(pb_file, 'wb') as f:
+            f.write(constant_graph.SerializeToString())
+
+        print('Freezing Done')
+ 
+    def infer(self, infer_set):
+        dir_path = os.path.dirname(__file__)
+        self.model_path= os.path.join(dir_path, self.args.model_path)
+        pb_file = os.path.join(self.model_path, 'model.pb')
+
+        with tf.gfile.FastGFile(pb_file, "rb") as f:
+            graph_def = tf.GraphDef()
+            graph_def.ParseFromString(f.read())
+
+            all_tensor = [n.name for n in graph_def.node]
+            for t in all_tensor:
+                print(t)
+
+            logits, prediction = tf.import_graph_def(graph_def,return_elements=['logits:0', 'prediction:0'])
+        
+        sess = tf.Session()
+        x = sess.graph.get_tensor_by_name('import/input/encoder_inputs:0')
+        x_len = sess.graph.get_tensor_by_name('import/input/Placeholder:0')
+
+        eval_x, eval_y, eval_x_len = infer_set
+        sample_num = eval_x.shape[0]
+        bs = self.args.batch_size
+
+        eval_all = [0,0]
+        eval_dict = [[0,0,0] for i in range(self.args.num_labels)]
+
+        for i in tqdm(range(sample_num//bs)):
+            prediction_val = sess.run(
+                prediction,
+                feed_dict={
+                    x: eval_x[(i*bs):(i*bs+bs)],
+                    x_len: eval_x_len[(i*bs):(i*bs+bs)],
+                }
+            )
+            ground_truth = eval_y[(i*bs):(i*bs+bs)].tolist()
+
+            for j in range(bs):
+                pred = prediction_val[j]
+                true = ground_truth[j]
+                eval_dict[pred][1] += 1
+                eval_dict[true][2] += 1
+                eval_all[0] += 1
+                if pred == true:
+                    eval_dict[pred][0] += 1
+                    eval_all[1] += 1
+        print('Accuracy is : ', eval_all[1] / eval_all[0])
+
+        for label_id, eval_result in enumerate(eval_dict):
+            if eval_result[1] == 0:
+                eval_result[1] = 2e32
+            if eval_result[2] == 0:
+                eval_result[2] = 2e32
+            print('Accuracy && Recall of label %d is : %f %f'%(label_id, eval_result[0]/eval_result[1], eval_result[0]/eval_result[2]))
 
     def buildModel(self):
-
         # Input
         with tf.name_scope('input'):
             # N, T_in
@@ -139,7 +209,7 @@ class BiLSTMCL(object):
             # N, C
             y = tf.placeholder(shape=(None, ), dtype=tf.int32, name='decoder_inputs')
             # N
-            x_len = tf.placeholder(shape=(None,), dtype=tf.int32)
+            x_len = tf.placeholder(shape=(None,), dtype=tf.int32, name='encoder_inputs_length')
 
             x_mask = tf.sequence_mask(x_len, self.args.max_sent_len, dtype=tf.float32)
 

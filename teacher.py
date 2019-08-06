@@ -10,8 +10,8 @@ class TeacherNet(object):
     def __init__(self, args):
         self.args = args
         dir_path = os.path.dirname(__file__)
-        model_path= os.path.join(dir_path, self.args.model_path)
-        pb_file = os.path.join(model_path, 'model.pb')
+        model_path= os.path.join(dir_path, self.args.build_path)
+        pb_file = os.path.join(build_path, 'model.pb')
 
         with tf.device('/cpu:0'):
             g1 = tf.Graph()
