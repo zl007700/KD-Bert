@@ -164,7 +164,7 @@ class BiLSTMCL(object):
         
         sess = tf.Session()
         x = sess.graph.get_tensor_by_name('import/input/encoder_inputs:0')
-        x_len = sess.graph.get_tensor_by_name('import/input/Placeholder:0')
+        #x_len = sess.graph.get_tensor_by_name('import/input/Placeholder:0')
 
         eval_x, eval_y, eval_x_len = infer_set
         sample_num = eval_x.shape[0]
@@ -178,7 +178,6 @@ class BiLSTMCL(object):
                 prediction,
                 feed_dict={
                     x: eval_x[(i*bs):(i*bs+bs)],
-                    x_len: eval_x_len[(i*bs):(i*bs+bs)],
                 }
             )
             ground_truth = eval_y[(i*bs):(i*bs+bs)].tolist()
