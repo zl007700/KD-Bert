@@ -1,0 +1,9 @@
+output
+log
+model
+build
+__pycache__
+data
+vector.bin
+vocab.txt
+corpus.txt
